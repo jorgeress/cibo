@@ -1,0 +1,49 @@
+# === Entornos virtuales ===
+venv/
+.venv/
+env/
+ENV/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Secretos y configuracion local ===
+.env
+.env.local
+*.key
+*.pem
+
+# === Datos generados en runtime ===
+data/vectordb/
+data/vector_db/
+data/conversations/*.json
+data/documents/*
+!data/**/.gitkeep
+
+# Modelos y embeddings descargados
+*.gguf
+*.bin
+*.safetensors
+.cache/
+
+# === Editores / SO ===
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# === Logs ===
+*.log
+logs/
