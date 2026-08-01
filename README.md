@@ -220,4 +220,6 @@ Lo que llegué a planear y se queda sin hacer, por la pausa:
 
 ## Licencia
 
-Proyecto personal, sin licencia definida. Todos los derechos reservados.
+MIT, en el archivo [LICENSE](LICENSE). Coge lo que te sirva: puedes usarlo, copiarlo, modificarlo y distribuirlo, incluso en algo comercial, mientras mantengas el aviso de copyright. Sin garantía de ningún tipo, que para un proyecto en pausa conviene decirlo en serio.
+
+Eso cubre el código de este repositorio. Llama 3.1, el modelo base sobre el que se construye `cibo-config.modelfile`, va por su cuenta con la licencia de Meta.
