@@ -4,7 +4,6 @@ Agente mejorado - Deteccion robusta y manejo de errores
 
 from typing import List, Dict, Any
 from .ollama_client import OllamaClient
-from ..storage.vector_store import VectorMemory
 
 import re
 import json
@@ -13,12 +12,31 @@ import json
 class Agent:
     """Agente que orquesta el uso de herramientas"""
     
-    def __init__(self, client: OllamaClient, tools: List[Any]):
+    def __init__(self, client: OllamaClient, tools: List[Any], use_memory: bool = False):
         self.client = client
         self.tools = {tool.name: tool for tool in tools}
         self.system_prompt = self._build_system_prompt()
-         # NUEVO: Memoria vectorial
-        self.memory = VectorMemory() if use_memory else None
+
+        # Memoria vectorial (opcional: requiere chromadb instalado)
+        self.memory = self._init_memory() if use_memory else None
+
+    def _init_memory(self):
+        """Carga VectorMemory de forma perezosa para no exigir chromadb siempre"""
+        try:
+            from ..storage.vector_store import VectorMemory
+        except ImportError:
+            # main.py añade src/ al path, asi que 'storage' es top-level
+            try:
+                from storage.vector_store import VectorMemory
+            except ImportError as e:
+                print(f"Memoria desactivada (falta dependencia): {e}")
+                return None
+
+        try:
+            return VectorMemory()
+        except Exception as e:
+            print(f"Memoria desactivada (error al inicializar): {e}")
+            return None
     
     def _build_system_prompt(self) -> str:
         """Construye prompt optimizado"""
