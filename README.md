@@ -2,9 +2,11 @@
 
 Empecé esto el 26 de enero de 2026 con la idea de entender de verdad cómo funciona un LLM por dentro, en vez de quedarme en usar ChatGPT y ya. Quería montar un modelo local, escribir yo el código que lo rodea y de paso soltarme con Python: clases abstractas, subprocesos, APIs HTTP, todo eso que se aprende mejor cuando lo necesitas para algo tuyo.
 
-CIBO es un asistente que corre entero en mi máquina con [Ollama](https://ollama.com/). Sabe cuándo le conviene tirar de una herramienta (una calculadora de verdad, un ejecutor de Python) en lugar de improvisar la respuesta, y si se lo permito puede mandar consultas a modelos en la nube. Por defecto no sale nada de aquí.
+CIBO es un asistente que corre entero en local con [Ollama](https://ollama.com/). Sabe cuándo le conviene tirar de una herramienta (una calculadora de verdad, un ejecutor de Python) en lugar de improvisar la respuesta, y si se lo permito puede mandar consultas a modelos en la nube. Por defecto no sale nada del equipo.
 
-Sigue en desarrollo y hay piezas a medio hacer. Las tengo listadas al final, sin maquillar.
+> **Proyecto en pausa indefinida.** Lo dejé aparcado y no tengo previsto retomarlo a corto plazo. Los motivos están explicados abajo, en [Estado del proyecto](#estado-del-proyecto). Lo publico porque el código sirve para ver cómo se monta esto por dentro, no como algo terminado ni mantenido.
+
+Hay piezas a medio hacer. Las tengo listadas al final, sin maquillar.
 
 ## Cómo ha ido creciendo
 
@@ -33,7 +35,7 @@ Protege lo que no debe salir. Hay tres modos de privacidad (`paranoid`, `balance
 | Python | 3.10 o superior (lo desarrollo con 3.13) |
 | Ollama | corriendo en `localhost:11434` |
 | Modelo | `llama3.1:8b`, o el propio `cibo:latest` |
-| GPU | recomendada (lo pruebo en una RTX 4060 de 8 GB), en CPU va pero lento |
+| GPU | recomendada, con 8 GB de VRAM llega justo para un 8B. En CPU va, pero lento |
 
 ## Instalación
 
@@ -181,7 +183,19 @@ python test_debug_agent.py   # traza del agente ejecutando código
 
 No son tests de `pytest`: se lanzan directamente e imprimen resultados por pantalla. La carpeta `tests/` la tengo reservada para cuando monte la suite automatizada.
 
-## Estado actual y lo que falta
+## Estado del proyecto
+
+En pausa indefinida desde febrero de 2026, por dos razones.
+
+La primera es la GPU. Con 8 GB de VRAM te mueves en modelos de 7B u 8B cuantizados, y ahí se nota el techo enseguida: el modelo se lía con instrucciones de varios pasos, se inventa cosas y hay que sujetarlo con detección por palabras clave en vez de dejar que decida él. Buena parte del código que hay aquí existe precisamente para compensar eso. Los modelos que sí razonan bien no me caben en local, y montar la infraestructura para ir más allá se salía de lo que quería aprender.
+
+La segunda es que esto se mueve muy rápido. Entre que empecé y lo dejé, salieron modelos mejores, Ollama cambió cosas y aparecieron librerías que resuelven de un plumazo lo que aquí está hecho a mano. Reescribirlo cada pocas semanas para ir detrás del estado del arte no era el objetivo.
+
+Y el objetivo era aprender, que eso sí salió. Entender cómo se habla con un modelo por HTTP, por qué un LLM necesita herramientas externas para no inventarse los números, cómo se aísla la ejecución de código, qué es una base vectorial y para qué sirve, cómo se diseña una interfaz común para intercambiar backends. Todo eso está en el repo y funciona.
+
+Así que lo dejo publicado como está. Si alguien lo mira buscando referencia de cómo se monta un asistente local con herramientas, le puede servir. No busques aquí una librería mantenida.
+
+## Lo que funciona y lo que falta
 
 Lo que funciona:
 
@@ -191,13 +205,14 @@ Lo que funciona:
 Lo que está a medias:
 
 - `src/tools/web_search.py` está vacío, aunque `duckduckgo-search` y `beautifulsoup4` ya figuran en `requirements.txt`.
+- `ClaudeAgent` trae como modelo por defecto `claude-3-5-sonnet-20241022`, que Anthropic retiró en octubre de 2025 y hoy devuelve 404. Hay que pasarle un modelo actual al construirlo. Es un buen ejemplo de lo que cuento arriba sobre la velocidad a la que se queda todo viejo.
 - `Coordinator` y `AgentRouter` están escritos pero `main.py` todavía no los usa: la consola instancia `Agent` directamente, así que al multi-agente solo se llega importándolo desde código.
 - La memoria vectorial (`use_memory=True`) es opcional y viene desactivada. Hacen falta `chromadb` y `sentence-transformers` instalados.
 - `Agent.process()` lee de la memoria pero nunca escribe en ella sola. Hay que llamar a `save_to_memory()` a mano.
 - El router busca los agentes por las claves `ollama_local` y `claude_api`, que salen de `BaseAgent.name`. Si añado un agente con otro nombre tendré que revisar eso.
 - `requirements.txt` arrastra dependencias que aún no uso (`streamlit`, `discord.py`, `langchain`, `faiss-cpu`), de las interfaces que tengo pensadas.
 
-Lo que quiero hacer:
+Lo que llegué a planear y se queda sin hacer, por la pausa:
 
 - Interfaz web con Streamlit y un bot de Discord.
 - RAG sobre documentos locales, en `data/documents/`.
