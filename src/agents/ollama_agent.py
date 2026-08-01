@@ -1,5 +1,15 @@
 """
-Agente que usa Ollama (local)
+Agente local, contra Ollama.
+
+Este es el que se usa por defecto y el unico que funciona sin configurar
+nada. No comparte codigo con core/ollama_client.py aunque hablen con el
+mismo servidor: el cliente de core lleva historial y streaming para la
+consola, mientras que este es de usar y tirar, sin estado, que es lo que
+necesita el router para poder intercambiarlo por Claude o Gemini.
+
+El modelo por defecto de aqui es un 32B cuantizado, que pide bastante mas
+VRAM de la que tiene una tarjeta de 8 GB. Si no te entra, pasale un modelo
+mas pequeño al construirlo.
 """
 
 from .base_agent import BaseAgent

@@ -1,5 +1,25 @@
 """
-Ejecutor de codigo Python seguro - VERSION MEJORADA
+Ejecuta codigo Python y devuelve lo que imprima.
+
+AVISO: esto NO es un sandbox. Es una barrera contra codigo que la lie sin
+querer, no contra alguien que quiera saltarsela. El codigo corre en un
+proceso de Python normal, con los permisos del usuario. Las comprobaciones
+de aqui son analisis estatico del texto, y el analisis estatico se esquiva
+sin despeinarse (getattr, cadenas montadas al vuelo, lo que sea). Si esto se
+expusiera a entrada de terceros haria falta un contenedor de verdad.
+
+Dicho eso, para lo que esta pensado (que el modelo ejecute cuatro lineas que
+le pasas tu) sirve. Lo que hace:
+
+    - bloquea imports de modulos con los que se puede tocar el sistema
+    - bloquea eval, exec, compile y open
+    - corre en un subproceso aparte, no en el del asistente
+    - lo mata a los 5 segundos, para que un while True no cuelgue nada
+    - trabaja en el directorio temporal, no en el del proyecto
+    - corta la salida a 5000 caracteres
+
+Lo del subproceso es lo que mas aporta: si el codigo peta, revienta el
+subproceso y el asistente ni se entera.
 """
 
 from .base import Tool
@@ -23,18 +43,25 @@ class CodeExecutor(Tool):
     
     def _detect_dangerous_imports(self, code: str) -> tuple[bool, str]:
         """
-        Detecta imports peligrosos de forma inteligente
-        
+        Busca imports que no deberian estar.
+
+        El detalle esta en mirar linea por linea con patrones de import, y no
+        buscar la palabra suelta en todo el texto. Si buscas "os" a pelo,
+        `mensaje = 'exitoso'` salta por los pelos y bloqueas codigo inocente.
+        Tambien se saltan los comentarios, que un `# import os` no ejecuta
+        nada.
+
         Returns:
-            (es_peligroso, modulo_detectado)
+            (es_peligroso, nombre_del_modulo)
         """
+        # Los cuatro primeros dan acceso al sistema de archivos y a lanzar
+        # procesos. El resto son formas de salir a la red
         dangerous = [
             'os', 'sys', 'subprocess', 'socket', 'requests',
             'urllib', 'http', 'ftplib', 'smtplib', 'telnetlib',
             '__import__', 'eval', 'exec', 'compile', 'open'
         ]
-        
-        # Patrones para detectar imports reales
+
         import_patterns = [
             r'^\s*import\s+(\w+)',           # import os
             r'^\s*from\s+(\w+)\s+import',    # from os import path
@@ -58,15 +85,28 @@ class CodeExecutor(Tool):
                     if module in dangerous:
                         return True, module
         
-        # Busca eval/exec/compile como funciones
+        # eval, exec y compile tambien valen sin importar nada, asi que se
+        # buscan aparte como llamada a funcion
         for danger in ['eval', 'exec', 'compile']:
             if re.search(rf'\b{danger}\s*\(', code):
                 return True, danger
-        
+
         return False, None
     
     def execute(self, code: str) -> Dict[str, Any]:
-        """Ejecuta codigo Python"""
+        """
+        Escribe el codigo a un archivo temporal y lo lanza en un subproceso.
+
+        Hace falta el archivo porque se invoca al interprete de Python como
+        si lo hubieras escrito tu en la terminal, y eso necesita un .py.
+
+        El cwd apunta al directorio temporal a proposito: si el codigo crea
+        archivos, que los cree ahi y no en el proyecto.
+
+        Returns:
+            En 'result' van stdout, stderr y el codigo de salida. En 'output'
+            va lo que interese enseñar, que es stdout si hubo, y si no stderr.
+        """
         
         if not code or not code.strip():
             return {
@@ -75,9 +115,9 @@ class CodeExecutor(Tool):
                 "error": "Codigo vacio"
             }
         
-        # Seguridad mejorada
+        # Se revisa antes de escribir nada al disco
         is_dangerous, dangerous_module = self._detect_dangerous_imports(code)
-        
+
         if is_dangerous:
             return {
                 "success": False,
@@ -87,6 +127,9 @@ class CodeExecutor(Tool):
         
         temp_file = None
         try:
+            # delete=False porque en Windows no se puede abrir un temporal
+            # que sigue abierto en otro sitio. Se cierra, se ejecuta y se
+            # borra a mano despues
             with tempfile.NamedTemporaryFile(
                 mode='w',
                 suffix='.py',
@@ -95,7 +138,7 @@ class CodeExecutor(Tool):
             ) as f:
                 f.write(code)
                 temp_file = f.name
-            
+
             result = subprocess.run(
                 ['python', temp_file],
                 capture_output=True,

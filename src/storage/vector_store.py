@@ -1,5 +1,19 @@
 """
-Sistema de memoria persistente con ChromaDB
+Memoria que sobrevive al cierre del programa, con ChromaDB.
+
+La idea es guardar frases y luego recuperarlas por significado, no por
+palabras exactas. Si guardas "prefiero Python a Java" y luego preguntas
+"que lenguaje me gusta", una busqueda de texto normal no encuentra nada
+porque no comparten ni una palabra. Una base vectorial si: convierte cada
+texto en una lista de numeros que representa lo que significa, y busca los
+mas cercanos.
+
+Hay dos colecciones separadas a proposito. `cibo_memory` guarda lo general y
+`user_context` lo que es del usuario, para poder consultar solo una de las
+dos o borrar la del usuario sin tocar el resto.
+
+La telemetria de ChromaDB va desactivada: seria contradictorio que un
+asistente que presume de local mandara estadisticas a un servidor.
 """
 
 import chromadb
@@ -38,17 +52,19 @@ class VectorMemory:
     
     def remember(self, text: str, metadata: Optional[Dict] = None, category: str = "general") -> str:
         """
-        Guarda información en memoria
-        
+        Guarda algo en la memoria.
+
         Args:
-            text: Texto a recordar
-            metadata: Metadatos adicionales
-            category: Categoría (general, user_info, preference, etc.)
-        
+            text: lo que hay que recordar
+            metadata: datos extra que quieras adjuntar
+            category: "user_info" va a la coleccion del usuario, cualquier
+                      otra cosa a la general
+
         Returns:
-            ID del documento guardado
+            El ID del documento, o None si fallo
         """
-        # Genera ID único
+        # El ID sale de un hash del propio texto, asi guardar dos veces lo
+        # mismo no crea duplicados: cae en el mismo ID
         text_hash = hashlib.md5(text.encode()).hexdigest()
         doc_id = f"{category}_{text_hash[:8]}"
         
@@ -77,15 +93,19 @@ class VectorMemory:
     
     def recall(self, query: str, n_results: int = 3, category: Optional[str] = None) -> List[Dict]:
         """
-        Recupera información relevante
-        
+        Busca lo mas parecido a la pregunta.
+
+        Consulta las dos colecciones, junta los resultados y los ordena por
+        `distance`: cuanto mas bajo, mas se parece. Como cada coleccion
+        devuelve hasta n_results por su cuenta, al final se recorta.
+
         Args:
-            query: Pregunta o tema
-            n_results: Cantidad de resultados
-            category: Filtrar por categoría
-        
+            query: sobre que buscar
+            n_results: cuantos devolver, ya ordenados
+            category: para mirar solo una categoria
+
         Returns:
-            Lista de resultados relevantes
+            Lista de dicts con 'text', 'metadata' y 'distance'
         """
         # Filtra por categoría si se especifica
         where_filter = {"category": category} if category else None
@@ -129,7 +149,12 @@ class VectorMemory:
             pass
     
     def clear_all(self):
-        """Borra toda la memoria (CUIDADO)"""
+        """
+        Borra la memoria entera. No hay vuelta atras.
+
+        Elimina las dos colecciones y las vuelve a crear vacias. Ojo: las
+        recrea sin los metadatos de descripcion que tenian al principio.
+        """
         self.client.delete_collection("cibo_memory")
         self.client.delete_collection("user_context")
         

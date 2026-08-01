@@ -1,5 +1,11 @@
 """
-Debug del agente con codigo
+Traza paso a paso del agente ejecutando codigo.
+
+El mas util de los cuatro cuando algo no funciona. En vez de decir si pasa
+o falla, va imprimiendo cada fase (que detecta, que codigo extrae, que
+devuelve CodeExecutor), asi que se ve exactamente en que punto se tuerce.
+
+Necesita Ollama corriendo. Se lanza a mano, no con pytest.
 """
 
 import sys

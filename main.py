@@ -1,12 +1,23 @@
 """
-CIBO - Asistente Local con Sistema de Herramientas
-Versión con Agente que decide cuándo usar herramientas
+CIBO: consola interactiva del asistente.
+
+Punto de entrada del proyecto. Monta las piezas y se queda en un bucle
+leyendo lo que escribes: comprueba que Ollama responda, carga las
+herramientas, crea el agente, y a partir de ahi cada linea que empieza por
+"/" es un comando y el resto va al agente.
+
+El agente es quien decide si una pregunta necesita calculadora, ejecutar
+codigo o simplemente responder. Aqui no hay nada de esa logica, solo la
+interfaz: la cascada de decision esta en src/core/agent.py.
+
+Para arrancarlo:  python main.py   (con `ollama serve` levantado)
 """
 
 import sys
 import os
 
-# Importaciones
+# main.py vive fuera de src/, asi que hay que meter esa carpeta en el path
+# para poder importar core, tools y compañia como paquetes de primer nivel
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from core.ollama_client import OllamaClient
@@ -86,31 +97,34 @@ def print_history(client):
 
 
 def main():
+    """Arranca el sistema y se queda en el bucle de conversacion"""
     clear_screen()
     print_header()
-    
+
     # === INICIALIZACIÓN ===
     print("\n🔧 Inicializando sistema...")
-    
-    # Cliente Ollama
+
     client = OllamaClient()
-    
+
+    # Se comprueba antes de nada porque el fallo mas comun con diferencia es
+    # olvidarse de arrancar el servidor
     if not client.is_running():
         print("❌ Ollama no está corriendo")
         print("   Ejecuta: ollama serve\n")
         return
-    
+
     print("✅ Ollama conectado")
-    
-    # Herramientas
+
+    # Para añadir una herramienta basta con instanciarla aqui: el agente las
+    # indexa por su nombre de clase y las reconoce sola
     tools = [
         Calculator(),
         CodeExecutor()
     ]
-    
+
     print(f"✅ {len(tools)} herramientas cargadas")
-    
-    # Agente
+
+    # Sin memoria persistente: use_memory=True la activa, pero pide chromadb
     agent = Agent(client, tools)
     print("✅ Agente inicializado")
     

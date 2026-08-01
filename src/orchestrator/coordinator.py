@@ -1,5 +1,17 @@
 """
-Coordinator - Orquesta agentes, herramientas y memoria
+El coordinador: junta router, memoria y herramientas en un solo sitio.
+
+Es la version "de arriba" de lo que hace core/agent.py. La diferencia es que
+Agent habla siempre con Ollama y decide entre sus dos herramientas, mientras
+que Coordinator no sabe con que modelo va a acabar hablando: se lo pregunta
+al router en cada turno.
+
+Cada llamada a process() sigue el mismo camino: mira la memoria, elige
+agente, monta el prompt con lo que haya recordado y genera.
+
+AVISO: esto funciona pero main.py todavia no lo usa. La consola instancia
+Agent directamente, asi que al multi-agente solo se llega importandolo desde
+codigo. Era el siguiente paso cuando el proyecto se paro.
 """
 
 from typing import List, Dict, Any
@@ -28,13 +40,11 @@ class Coordinator:
     
     def process(self, query: str) -> str:
         """
-        Procesa query completo con agentes, herramientas y memoria
-        
-        Args:
-            query: Pregunta del usuario
-        
-        Returns:
-            Respuesta final
+        Procesa una pregunta de principio a fin.
+
+        Ojo: el diccionario de herramientas se guarda y se lista en las
+        estadisticas, pero aqui nadie las ejecuta. Quien decide usarlas es el
+        modelo, y esa parte esta en core/agent.py. Otra costura a medio coser.
         """
         
         # 1. Recupera contexto de memoria

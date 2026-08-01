@@ -1,5 +1,18 @@
 """
-Configuración de niveles de privacidad
+Los tres modos de privacidad, que definen que se permite en cada uno.
+
+En vez de repartir condicionales por todo el codigo, cada modo es una
+entrada de un diccionario que dice que agentes, que herramientas y que
+accesos estan permitidos. Para cambiar de politica se toca la tabla, no la
+logica.
+
+    paranoid     nada sale del equipo, ni internet ni nube
+    balanced     nube permitida, pero con los datos sensibles filtrados
+    performance  todo abierto, incluida la memoria en la nube
+
+El modo por defecto es balanced. `paranoid` es el que hay que elegir si de
+verdad no quieres que nada salga: los otros dos dependen de que las
+comprobaciones de SecurityLayer acierten, y esas son por patrones.
 """
 
 from typing import Dict, List

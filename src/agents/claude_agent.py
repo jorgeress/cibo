@@ -1,5 +1,22 @@
 """
-Agente que usa Claude API (Anthropic)
+Agente de pago, contra la API de Claude.
+
+Opcional. Hace falta la libreria `anthropic` y una clave en ANTHROPIC_API_KEY,
+y si falta cualquiera de las dos el constructor revienta a proposito, para
+enterarte al arrancar y no a mitad de una conversacion. El __init__.py del
+paquete lo importa dentro de un try, asi que sin clave el resto sigue
+funcionando igual.
+
+Lo que se manda aqui sale del equipo. Antes de llegar a este punto deberia
+haber pasado por SecurityLayer, y el router solo lo elige si el modo de
+privacidad lo permite.
+
+OJO CON EL MODELO POR DEFECTO: se escribio en febrero de 2026 apuntando a
+claude-3-5-sonnet-20241022, que Anthropic retiro en octubre de 2025. Ese ID
+ya devuelve 404, asi que hay que pasarle un modelo actual al construirlo.
+En agosto de 2026 los vigentes son claude-opus-5, claude-sonnet-5 y
+claude-haiku-4-5. Buen ejemplo de por que el proyecto esta en pausa: se
+queda obsoleto sin que toques una linea.
 """
 
 from .base_agent import BaseAgent

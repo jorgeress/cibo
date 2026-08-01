@@ -1,6 +1,12 @@
 """
-Test de estres - Casos complejos y edge cases
-Simula uso real del asistente
+Prueba de estres: los casos raros que rompen la deteccion.
+
+Aqui es donde se ve si la deteccion por palabras clave aguanta. Mezcla
+operaciones encadenadas, frases que mencionan codigo sin pedir ejecutarlo,
+numeros enormes y preguntas ambiguas. Lo que falle aqui suele acabar siendo
+un patron nuevo en _extract_math_expression o en _detect_code_query.
+
+Necesita Ollama corriendo. Se lanza a mano, no con pytest.
 """
 
 import sys

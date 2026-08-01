@@ -1,5 +1,10 @@
 """
-Suite completa de tests - VERSION CORREGIDA
+Comprobacion completa: cliente, herramientas y agente.
+
+No es pytest. Se lanza a mano (`python test_complete.py`) e imprime los
+resultados por pantalla. Necesita Ollama corriendo, porque prueba contra el
+modelo de verdad y no contra un mock: buena parte de lo que interesa
+comprobar aqui es justamente como se comporta el modelo.
 """
 
 import sys

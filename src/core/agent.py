@@ -1,5 +1,23 @@
 """
-Agente mejorado - Deteccion robusta y manejo de errores
+El agente: decide si una pregunta se resuelve con una herramienta o
+hablando con el modelo.
+
+La idea de fondo es que un modelo de 8B no es de fiar para segun que cosas.
+Le pides una multiplicacion de seis cifras y se inventa el resultado con
+total seguridad. Asi que antes de pasarle nada al modelo, aqui se mira si
+la pregunta cae en un caso que sabemos resolver de forma exacta.
+
+El orden de process() va de lo barato a lo caro:
+
+    1. Es matematicas?  -> Calculator, sin tocar el modelo
+    2. Piden ejecutar codigo? -> CodeExecutor, sin tocar el modelo
+    3. Ni idea -> se lo preguntamos al modelo, que puede pedir herramienta
+    4. Pidio herramienta? -> se ejecuta
+    5. Si no, su respuesta tal cual
+
+Los pasos 1 y 2 son deteccion por palabras clave y expresiones regulares.
+Es tosco y se le escapan casos, pero es instantaneo y no falla, mientras
+que dejarselo decidir al modelo sale caro en tiempo y acierta a medias.
 """
 
 from typing import List, Dict, Any
@@ -10,9 +28,18 @@ import json
 
 
 class Agent:
-    """Agente que orquesta el uso de herramientas"""
-    
+    """Orquesta el modelo y las herramientas"""
+
     def __init__(self, client: OllamaClient, tools: List[Any], use_memory: bool = False):
+        """
+        Args:
+            client: cliente de Ollama ya configurado
+            tools: lista de herramientas. Se indexan por su atributo .name,
+                   que es el nombre de la clase (Calculator, CodeExecutor)
+            use_memory: si activarla memoria vectorial persistente. Va
+                        desactivada porque arrastra chromadb y sentence-transformers,
+                        que son varios cientos de MB
+        """
         self.client = client
         self.tools = {tool.name: tool for tool in tools}
         self.system_prompt = self._build_system_prompt()
@@ -21,7 +48,14 @@ class Agent:
         self.memory = self._init_memory() if use_memory else None
 
     def _init_memory(self):
-        """Carga VectorMemory de forma perezosa para no exigir chromadb siempre"""
+        """
+        Carga VectorMemory solo cuando hace falta.
+
+        Se importa aqui dentro y no arriba a proposito: asi quien no use
+        memoria no necesita tener chromadb instalado. Si algo falla, avisa
+        y devuelve None, porque quedarse sin memoria no es motivo para no
+        arrancar.
+        """
         try:
             from ..storage.vector_store import VectorMemory
         except ImportError:
@@ -84,7 +118,17 @@ Usuario: Hola
 Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
     
     def _detect_math_query(self, text: str) -> bool:
-        """Detecta si es pregunta matematica"""
+        """
+        Es una pregunta de matematicas?
+
+        Dos vias: que aparezca un verbo de calculo, o que se vea un patron
+        numero-operador-numero. Con la primera pillamos "multiplica 8 por 9"
+        y con la segunda "8 * 9" a secas.
+
+        Da falsos positivos ("cuanto tarda un tren en llegar"), pero eso lo
+        absorbe _extract_math_expression: si no encuentra expresion devuelve
+        None y process() sigue por el camino normal.
+        """
         math_keywords = [
             'cuanto', 'calcula', 'suma', 'resta', 'multiplica', 'divide',
             'raiz', 'potencia', 'resultado', 'operacion'
@@ -100,12 +144,19 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
     
     def _extract_math_expression(self, text: str) -> str:
         """
-        Extrae expresiones matematicas de forma robusta
-        
+        Saca la operacion de la frase y la deja lista para Calculator.
+
         Ejemplos:
         - "Calcula (25 * 4) + (100 / 2) - 10" -> "(25 * 4) + (100 / 2) - 10"
         - "Multiplica 999999 por 888888" -> "999999 * 888888"
         - "Cuanto es 5 mas 3?" -> "5 + 3"
+
+        Va probando patrones de mas a menos especifico. Primero busca una
+        expresion ya escrita en simbolos, y si no la hay traduce las formas
+        habituales en castellano ("multiplica X por Y", "divide X entre Y").
+
+        Devuelve None si no encuentra nada aprovechable, y entonces la
+        pregunta sigue su curso hacia el modelo.
         """
         # Patron 1: Expresion matematica con operadores y parentesis
         # Incluye espacios, numeros, operadores, parentesis
@@ -147,30 +198,37 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
         return None
     
     def _detect_code_query(self, text: str) -> bool:
-        """Detecta si pide ejecutar codigo - VERSION MEJORADA"""
-        
-        # Keywords que indican EJECUCION
+        """
+        Estan pidiendo ejecutar codigo, o solo hablando de codigo?
+
+        La distincion importa: "ejecuta print('hola')" hay que correrlo, pero
+        "me gusta Python" no. Por eso no basta con ver si aparece codigo en la
+        frase, tiene que haber un verbo de ejecucion.
+        """
         execute_keywords = ['ejecuta', 'corre', 'run', 'ejecutar', 'correr']
-        
-        # Si tiene keyword de ejecucion, es codigo
+
         if any(keyword in text.lower() for keyword in execute_keywords):
             return True
-        
-        # Si menciona codigo SIN pedir ejecucion, NO es codigo
+
+        # Verbos de opinion: hablan de codigo pero no piden nada
         mention_keywords = ['me gusta', 'uso', 'utilizo', 'prefiero', 'suelo']
         if any(keyword in text.lower() for keyword in mention_keywords):
-            return False  # Solo menciona, no pide ejecutar
-        
+            return False
+
         return False
     
     def _extract_code(self, text: str) -> str:
         """
-        Extrae codigo de forma inteligente
-        
+        Separa el codigo de la frase que lo envuelve.
+
         Ejemplos:
         - "Ejecuta: print('Hola')" -> "print('Hola')"
         - 'Ejecuta este codigo: print("Test")' -> 'print("Test")'
         - "Corre print(5)" -> "print(5)"
+
+        Lo normal es que venga detras de dos puntos, asi que ese es el primer
+        intento. Si no, busca construcciones de Python reconocibles, y como
+        ultimo recurso corta por el verbo de ejecucion.
         """
         # Patron 1: Despues de ":" hasta el final
         match = re.search(r':\s*(.+)$', text, re.DOTALL)
@@ -197,15 +255,26 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
         return text
     
     def save_to_memory(self, text: str, category: str = "general"):
-        """Guarda información importante en memoria persistente"""
+        """
+        Guarda algo en la memoria persistente.
+
+        Hay que llamarla a mano. El agente lee de la memoria en cada turno
+        pero no escribe solo, porque decidir que merece recordarse es un
+        problema aparte que no llegue a resolver.
+        """
         if self.memory:
             return self.memory.remember(text, category=category)
         return None
 
     def process(self, user_input: str) -> str:
-        """Procesa entrada con deteccion mejorada Y MEMORIA"""
-    
-        # NUEVO: Busca en memoria ANTES de procesar
+        """
+        Punto de entrada: recibe lo que escribe el usuario y devuelve texto.
+
+        Sigue la cascada descrita arriba en el modulo. Siempre devuelve un
+        string, tambien cuando algo falla, para que quien llame no tenga que
+        distinguir entre respuesta y error.
+        """
+        # Lo recordado se inyecta en el prompt del paso 3, si se llega
         context_from_memory = ""
         if self.memory:
             relevant_memories = self.memory.recall(user_input, n_results=3)
@@ -223,6 +292,8 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
                 result = self.tools['Calculator'].run(expression=expression)
                 
                 if result.get('success'):
+                    # El :, mete comas como separador de miles y luego se
+                    # cambian por puntos, que es como se escribe en español
                     return f"El resultado es {result['result']:,}".replace(',', '.')
                 else:
                     error = result.get('error', 'Error desconocido')
@@ -237,20 +308,23 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
                     result = self.tools['CodeExecutor'].run(code=code)
                     
                     if result.get('success'):
-                        # Extrae output de forma robusta
+                        # CodeExecutor devuelve la salida en 'output', pero
+                        # tambien la deja dentro de 'result'. Se miran las dos
+                        # por si acaso
                         output = ''
                         if 'output' in result:
                             output = result['output']
                         elif 'result' in result and isinstance(result['result'], dict):
                             output = result['result'].get('stdout', '')
-                        
+
                         if output:
                             return f"Codigo ejecutado. Salida:\n{output}"
                         else:
                             return "Codigo ejecutado correctamente (sin salida)"
-                    
+
                     else:
-                        # Manejo robusto de errores
+                        # Un fallo puede venir como 'error' (lo bloqueamos
+                        # nosotros) o como stderr (peto al ejecutarse)
                         error_msg = result.get('error')
                         
                         if not error_msg and 'result' in result and isinstance(result['result'], dict):
@@ -264,20 +338,28 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
                 except Exception as e:
                     return f"Error inesperado al ejecutar: {str(e)}"
         
-        # PASO 3: Si no es obvio, pregunta al LLM CON CONTEXTO
+        # PASO 3: no esta claro, que decida el modelo.
+        # Se le monta el prompt entero a mano: instrucciones + lo recordado +
+        # los ultimos 10 mensajes. El corte de 10 es para no pasarse del
+        # contexto de 8192 tokens, que con conversaciones largas se llena.
         history_context = ""
         for msg in self.client.conversation_history[-10:]:
             role = "Usuario" if msg["role"] == "user" else "Asistente"
             history_context += f"{role}: {msg['content']}\n\n"
-        
+
         decision_prompt = f"{self.system_prompt}\n\n{context_from_memory}\n\n{history_context}Usuario: {user_input}\n\nAsistente:"
 
+        # Temperatura baja: aqui no queremos creatividad, queremos que siga
+        # el formato de herramientas al pie de la letra
         response = self.client.chat(decision_prompt, temperature=0.2)
-        
-        # PASO 4: Detecta si uso herramienta
+
+        # PASO 4: pidio una herramienta?
+        # El formato <tool>...</tool><params>...</params> viene del system
+        # prompt. Se parsea con regex y no con un parser de verdad porque el
+        # modelo se lo salta la mitad de las veces, asi que tampoco compensa
         tool_match = re.search(r'<tool>(.*?)</tool>', response)
         params_match = re.search(r'<params>(.*?)</params>', response, re.DOTALL)
-        
+
         if tool_match and params_match:
             tool_name = tool_match.group(1).strip()
             params_str = params_match.group(1).strip()
@@ -311,7 +393,8 @@ Tu: ¡Hola! ¿En que puedo ayudarte hoy?"""
                         return f"Error: {error}"
                 
                 except Exception as e:
+                    # Casi siempre es que los params no eran JSON valido
                     return f"Error al usar {tool_name}: {str(e)}"
-        
-        # PASO 5: Respuesta normal sin herramientas
+
+        # PASO 5: contesto normal, se devuelve tal cual
         return response

@@ -1,5 +1,20 @@
 """
-Calculadora precisa - Evita alucinaciones del LLM en matemáticas
+Calculadora, para que el modelo no se invente los numeros.
+
+Un LLM no calcula, predice texto. Si le pides 8347 * 9562 te suelta un
+numero con toda la seguridad del mundo y suele estar mal, porque lo que hace
+es escribir algo que se parece a un resultado. Con siete u ocho cifras ya
+falla casi siempre.
+
+La solucion es no dejarle hacer cuentas. Se detecta la operacion antes, se
+calcula aqui de verdad y se le da hecha.
+
+Sobre el uso de eval(): si evaluas la expresion tal cual, cualquiera puede
+colar `__import__("os").system(...)`. Aqui se cierra por dos lados. Primero
+se filtran los caracteres contra una lista blanca, y despues se llama a eval
+con __builtins__ vacio, de forma que dentro solo existe lo que se le pasa a
+mano (sqrt, sin, cos, pi y poco mas). Sin builtins no hay ni import ni open
+ni nada a lo que agarrarse.
 """
 
 from .base import Tool
@@ -25,13 +40,14 @@ class Calculator(Tool):
     
     def execute(self, expression: str) -> Dict[str, Any]:
         """
-        Evalúa expresión matemática de forma segura
-        
+        Evalúa una expresión matemática.
+
         Args:
-            expression: Expresión matemática (ej: "2 + 2", "sqrt(16)")
-        
+            expression: la operación, en símbolos o con palabras en español
+                        ("2 + 2", "sqrt(16)", "raiz(16)")
+
         Returns:
-            Dict con resultado o error
+            Dict con el resultado, o con el error si la expresión no valía
         """
         # Limpieza de la expresión
         expression = expression.strip()
@@ -44,13 +60,14 @@ class Calculator(Tool):
                 "error": "Expresión vacía"
             }
         
-        # Caracteres permitidos (seguridad)
         allowed_chars = set('0123456789+-*/().** ')
-        
-        # Reemplaza funciones comunes
+
+        # Traduce "raiz" a "sqrt" y demas, antes de validar
         expression = self._prepare_expression(expression)
-        
-        # Valida caracteres después de preparación
+
+        # Se permiten letras porque los nombres de funcion las llevan. No es
+        # gran filtro por si solo, pero combinado con el __builtins__ vacio de
+        # abajo deja poco margen: una letra suelta no llega a ningun sitio
         if not all(c in allowed_chars or c.isalpha() for c in expression):
             return {
                 "success": False,
@@ -58,7 +75,8 @@ class Calculator(Tool):
                 "error": "Caracteres no permitidos en la expresión"
             }
         
-        # Contexto seguro para eval
+        # Todo lo que va a existir dentro del eval. Lo que no este aqui, no
+        # existe, y eso incluye import, open, exec y compania
         safe_dict = {
             'sqrt': math.sqrt,
             'sin': math.sin,
@@ -76,14 +94,13 @@ class Calculator(Tool):
         }
         
         try:
-            # Evalúa de forma segura
             result = eval(expression, safe_dict, {})
-            
-            # Formatea resultado
+
             if isinstance(result, float):
-                # Redondea a 10 decimales para evitar imprecisiones
+                # Los floats arrastran basura del binario: 0.1 + 0.2 da
+                # 0.30000000000000004. Con 10 decimales sobra
                 result = round(result, 10)
-                # Elimina .0 si es entero
+                # Y si al final era entero, se devuelve entero
                 if result.is_integer():
                     result = int(result)
             
@@ -108,8 +125,13 @@ class Calculator(Tool):
             }
     
     def _prepare_expression(self, expr: str) -> str:
-        """Prepara expresión para evaluación segura"""
-        # Reemplaza palabras comunes
+        """
+        Traduce los nombres de funcion en español a los de math.
+
+        Como el asistente se usa en español, es normal que llegue "raiz(16)"
+        en vez de "sqrt(16)". Se pasa todo a minusculas de paso, que math no
+        entiende SQRT.
+        """
         replacements = {
             'raiz': 'sqrt',
             'raíz': 'sqrt',

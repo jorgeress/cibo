@@ -1,5 +1,19 @@
 """
-Router - Decide qué agente usar según el query
+El router: elige a que modelo mandar cada pregunta.
+
+Aqui la privacidad va por delante de la potencia. El orden de las
+comprobaciones no es casual, cada una puede cortar antes de llegar a la
+siguiente:
+
+    1. Modo paranoid          -> local, sin discusion
+    2. Datos sensibles        -> local, aunque el modo permita cloud
+    3. Pregunta simple        -> local, no gastamos API en un "hola"
+    4. Modo performance
+       y razonamiento duro    -> Claude, si esta disponible
+    5. Todo lo demas          -> local
+
+Las comprobaciones 2 y 3 son las que importan: aunque tengas activado el
+modo mas permisivo, una contraseña o un numero de tarjeta no salen de aqui.
 """
 
 from typing import List, Optional
@@ -16,6 +30,9 @@ class AgentRouter:
             agents: Lista de agentes disponibles
             default_agent: Nombre del agente por defecto
         """
+        # Las claves salen del .name de cada agente, en minusculas y con los
+        # espacios en guion bajo: "Ollama Local" -> "ollama_local". Si añades
+        # un agente nuevo, revisa que el nombre cuadre con lo que busca route()
         self.agents = {agent.name.lower().replace(" ", "_"): agent for agent in agents}
         self.default_agent = default_agent
     
@@ -54,7 +71,13 @@ class AgentRouter:
         return self._get_agent("ollama_local")
     
     def _is_sensitive(self, text: str) -> bool:
-        """Detecta datos sensibles"""
+        """
+        Hay algo en la pregunta que no deberia salir del equipo?
+
+        Es deteccion por patrones, o sea que se le escapan cosas: no reconoce
+        una contraseña que no se llame contraseña. Por eso esto no sustituye a
+        SecurityLayer, que vuelve a comprobar justo antes de enviar.
+        """
         sensitive_patterns = [
             r'\b\d{16}\b',  # Tarjetas
             r'password', r'contraseña',
@@ -69,21 +92,35 @@ class AgentRouter:
         return False
     
     def _is_simple_task(self, text: str) -> bool:
-        """Detecta si es tarea simple"""
+        """
+        Esto lo resuelve el modelo local sin despeinarse?
+
+        Saludos y definiciones no justifican pagar una llamada a la nube.
+        """
         simple_keywords = ['hola', 'que es', 'explica', 'define']
         return any(keyword in text.lower() for keyword in simple_keywords)
-    
+
     def _needs_advanced_reasoning(self, text: str) -> bool:
-        """Detecta si necesita razonamiento avanzado"""
+        """
+        Merece la pena el modelo grande?
+
+        Verbos de analisis, comparacion y critica, que es donde mas se nota
+        la diferencia entre un 8B local y un modelo de pago.
+        """
         complex_keywords = ['analiza', 'compara', 'evalua', 'critica', 'argumento']
         return any(keyword in text.lower() for keyword in complex_keywords)
-    
+
     def _get_agent(self, name: str) -> Optional[BaseAgent]:
-        """Obtiene agente por nombre"""
+        """
+        Devuelve un agente por nombre, o el de reserva si no puede.
+
+        Comprueba is_available() antes de devolverlo, asi que si Ollama esta
+        apagado o falta una API key, la peticion no se pierde: cae al agente
+        por defecto en vez de reventar.
+        """
         agent = self.agents.get(name)
-        
+
         if agent and agent.is_available():
             return agent
-        
-        # Fallback al default
+
         return self.agents.get(self.default_agent)

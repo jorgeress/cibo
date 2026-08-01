@@ -1,3 +1,23 @@
+"""
+Cliente HTTP contra la API de Ollama.
+
+Ollama levanta un servidor local en el puerto 11434 y se habla con el por
+HTTP normal y corriente, sin SDK de por medio. Solo se usan dos endpoints:
+
+    POST /api/generate  genera texto
+    GET  /api/tags      lista los modelos instalados
+
+Hay dos formas de generar. Sin streaming espera a que termine y devuelve el
+texto entero, que es lo comodo para llamar desde codigo. Con streaming el
+servidor va mandando un JSON por linea segun genera, y se van soltando los
+tokens segun llegan, que es lo que hace falta para que en pantalla aparezca
+escribiendose en vez de salir de golpe tras diez segundos en blanco.
+
+El historial se guarda aqui, en memoria y mientras dure el proceso. Ollama
+no recuerda nada entre peticiones: cada llamada va sola, y si quieres que el
+modelo tenga contexto se lo tienes que meter tu en el prompt.
+"""
+
 import requests
 import json
 import os
@@ -7,8 +27,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class OllamaClient:
-    """Cliente para interactuar con Ollama - Streaming fluido"""
-    
+    """Cliente para interactuar con Ollama"""
+
     def __init__(self, 
                  model: Optional[str] = None,
                  base_url: Optional[str] = None):
@@ -17,12 +37,18 @@ class OllamaClient:
         self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.conversation_history: List[Dict] = []
     
-    def chat(self, 
-             prompt: str, 
+    def chat(self,
+             prompt: str,
              system: Optional[str] = None,
              temperature: float = 0.7) -> str:
         """
-        Chat básico sin streaming (para uso programático)
+        Genera una respuesta completa y la devuelve.
+
+        Bloquea hasta que el modelo termina. El timeout es de 3 minutos
+        porque en CPU, o con el contexto lleno, un 8B puede tardar bastante.
+
+        Los errores se devuelven como texto en vez de lanzar excepcion, para
+        que un fallo de red no tumbe la conversacion entera.
         """
         url = f"{self.base_url}/api/generate"
         
@@ -55,10 +81,16 @@ class OllamaClient:
     
     def chat_stream(self, prompt: str, system: Optional[str] = None) -> Generator[str, None, None]:
         """
-        Chat con streaming token por token (para UI)
-        
+        Igual que chat() pero soltando los tokens segun llegan.
+
+        Con stream=True, Ollama responde con un JSON por linea. Cada uno trae
+        un trozo de texto en "response", y el ultimo trae "done": true.
+
+        El decode_unicode=True de iter_lines es importante: sin el, los
+        acentos y las ñ llegan partidos entre dos trozos y se ven mal.
+
         Yields:
-            Cada token individual
+            Cada token segun lo genera el modelo
         """
         url = f"{self.base_url}/api/generate"
         
@@ -106,9 +138,16 @@ class OllamaClient:
     
     def chat_with_context(self, prompt: str, max_history: int = 10) -> str:
         """
-        Chat con contexto (sin streaming) - para uso programático
+        Como chat(), pero arrastrando la conversacion anterior.
+
+        Como Ollama no guarda estado, el "contexto" es literalmente pegar los
+        mensajes previos delante del prompt, con su etiqueta de quien habla.
+
+        Args:
+            max_history: cuantos intercambios recuperar. Se multiplica por 2
+                         porque cada intercambio son dos mensajes, el del
+                         usuario y el del asistente
         """
-        # Construye contexto
         context_messages = self.conversation_history[-(max_history*2):]
         
         context = ""
@@ -122,9 +161,12 @@ class OllamaClient:
     
     def chat_with_context_stream(self, prompt: str, max_history: int = 10) -> Generator[str, None, None]:
         """
-        Chat con contexto Y streaming - para UI
+        Contexto y streaming a la vez, que es lo que quiere una interfaz.
+
+        Aqui la pregunta se mete en el historial antes de mandar nada, porque
+        chat_stream solo apunta la respuesta del asistente. Si se hiciera
+        despues, el turno del usuario se perderia.
         """
-        # Añade pregunta al historial ANTES de enviar
         self._add_to_history("user", prompt)
         
         # Construye contexto
@@ -159,14 +201,19 @@ class OllamaClient:
         return self.conversation_history
     
     def export_history(self, filepath: str):
-        """Exporta historial a JSON"""
+        """
+        Vuelca la conversacion a un JSON.
+
+        Con ensure_ascii=False para que los acentos se guarden como acentos y
+        no como secuencias \\uXXXX ilegibles.
+        """
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(self.conversation_history, f, indent=2, ensure_ascii=False)
         print(f"Guardado en {filepath}")
-    
+
     def get_models(self) -> List[str]:
-        """Lista modelos disponibles"""
+        """Nombres de los modelos que hay instalados en Ollama"""
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             if response.status_code == 200:
@@ -177,7 +224,13 @@ class OllamaClient:
             return []
     
     def is_running(self) -> bool:
-        """Verifica si Ollama está corriendo"""
+        """
+        Esta el servidor de Ollama levantado?
+
+        Se pregunta antes de arrancar, porque el fallo mas comun con
+        diferencia es olvidarse de lanzar `ollama serve`. Timeout corto: si
+        no contesta en 2 segundos es que no esta.
+        """
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=2)
             return response.status_code == 200
