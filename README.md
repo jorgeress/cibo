@@ -1,5 +1,7 @@
 # CIBO
 
+**Un asistente que corre entero en tu ordenador, sabe cuándo usar una herramienta en vez de inventarse la respuesta, y no manda nada a la nube sin permiso.**
+
 Empecé esto el 26 de enero de 2026 con la idea de entender de verdad cómo funciona un LLM por dentro, en vez de quedarme en usar ChatGPT y ya. Quería montar un modelo local, escribir yo el código que lo rodea y de paso soltarme con Python: clases abstractas, subprocesos, APIs HTTP, todo eso que se aprende mejor cuando lo necesitas para algo tuyo.
 
 CIBO es un asistente que corre entero en local con [Ollama](https://ollama.com/). Sabe cuándo le conviene tirar de una herramienta (una calculadora de verdad, un ejecutor de Python) en lugar de improvisar la respuesta, y si se lo permito puede mandar consultas a modelos en la nube. Por defecto no sale nada del equipo.
@@ -40,8 +42,8 @@ Protege lo que no debe salir. Hay tres modos de privacidad (`paranoid`, `balance
 ## Instalación
 
 ```bash
-git clone https://github.com/jorgeress/cibo-project.git
-cd cibo-project
+git clone https://github.com/jorgeress/cibo.git
+cd cibo
 
 python -m venv venv
 venv\Scripts\activate        # Windows
@@ -134,7 +136,26 @@ main.py                    Consola interactiva (bucle + comandos)
 
 ### Cómo decide el agente
 
-`Agent.process()` va en cascada, de lo más barato a lo más caro:
+`Agent.process()` va en cascada, de lo más barato a lo más caro. Antes de gastar
+una sola generación del modelo, mira si la pregunta la puede resolver una
+herramienta:
+
+```mermaid
+flowchart TD
+    IN(["Lo que escribes"]) --> M{"¿Es una pregunta<br/>matemática?"}
+    M -->|sí| CALC["Calculator<br/>lista blanca de caracteres"]
+    M -->|no| EX{"¿Te piden<br/>ejecutar código?"}
+    EX -->|sí| CODE["CodeExecutor<br/>subproceso · timeout 5s"]
+    EX -->|no| LLM["LLM en Ollama<br/>system prompt + últimos 10 mensajes + memoria"]
+    LLM --> T{"¿Ha pedido una<br/>herramienta?"}
+    T -->|sí| RUN["Ejecuta la herramienta"]
+    T -->|no| OUT(["Respuesta"])
+    CALC --> OUT
+    CODE --> OUT
+    RUN --> OUT
+```
+
+Paso a paso:
 
 1. Mira si es una pregunta matemática, por palabras clave (`calcula`, `cuánto`, `multiplica`) o por patrones tipo `\d+ [+-*/] \d+`. Si lo es, extrae la expresión y llama a `Calculator` sin molestar al LLM.
 2. Mira si le piden ejecutar código, por verbos como `ejecuta`, `corre` o `run`. Distingue "ejecuta este código" de "me gusta Python", que solo lo menciona.
@@ -144,7 +165,24 @@ main.py                    Consola interactiva (bucle + comandos)
 
 ### Cómo decide el router
 
-`AgentRouter.route()` pone la privacidad por delante de la potencia:
+`AgentRouter.route()` pone la privacidad por delante de la potencia. Salir a la
+nube es la excepción, no lo normal: hay que pasar por cuatro filtros para
+llegar ahí.
+
+```mermaid
+flowchart TD
+    Q(["Consulta"]) --> P{"¿Modo paranoid?"}
+    P -->|sí| LOCAL["Ollama en local"]
+    P -->|no| S{"¿Datos sensibles?<br/>tarjetas, contraseñas, tokens"}
+    S -->|sí| LOCAL
+    S -->|no| SIMPLE{"¿Tarea simple?<br/>saludos, definiciones"}
+    SIMPLE -->|sí| LOCAL
+    SIMPLE -->|no| PERF{"¿Modo performance y<br/>razonamiento complejo?"}
+    PERF -->|no| LOCAL
+    PERF -->|sí| CLOUD["Claude, si está disponible"]
+```
+
+Las reglas, en orden:
 
 - En modo `paranoid` siempre va local, sin excepciones.
 - Si detecta datos sensibles (tarjetas, contraseñas, tokens, números de la seguridad social) también va local.
