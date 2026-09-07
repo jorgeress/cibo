@@ -256,6 +256,28 @@ Lo que llegué a planear y se queda sin hacer, por la pausa:
 - RAG sobre documentos locales, en `data/documents/`.
 - Integración con Telegram y WhatsApp.
 
+## El nombre
+
+```
+            ╭───────────────╮
+            │       ◆       │
+            ╰───────┬───────╯
+                    │
+        ┌───────────┼───────────┐
+        │           │           │
+        ▼           ▼           ▼
+    ┌───────┐   ┌───────┐   ┌───────┐
+    │ ▓▓▓▓▓ │   │       │   │       │
+    │ ▓ ◆ ▓ │   │       │   │       │
+    │ ▓▓▓▓▓ │   │       │   │       │
+    └───────┘   └───────┘   └───────┘
+     Ollama      Claude      Gemini
+```
+
+CIBO viene de *Blame!*, el manga de Tsutomu Nihei. Cibo es una científica que a lo largo de la historia va cambiando de cuerpo: la misma cabeza dentro de recipientes distintos.
+
+Le puse su nombre porque resultó ser exactamente lo que acabó haciendo `BaseAgent`. Ollama, Claude y Gemini son cuerpos intercambiables detrás de la misma interfaz, y el router decide en cuál se mete CIBO sin que el resto del código se entere. Por defecto vive en el local y los otros dos están vacíos, que es lo que dibuja el diagrama.
+
 ## Licencia
 
 MIT, en el archivo [LICENSE](LICENSE). Coge lo que te sirva: puedes usarlo, copiarlo, modificarlo y distribuirlo, incluso en algo comercial, mientras mantengas el aviso de copyright. Sin garantía de ningún tipo, que para un proyecto en pausa conviene decirlo en serio.
