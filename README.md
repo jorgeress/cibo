@@ -1,83 +1,87 @@
 # CIBO
 
-**Un asistente que corre entero en tu ordenador, sabe cuándo usar una herramienta en vez de inventarse la respuesta, y no manda nada a la nube sin permiso.**
+*[Versión en español](README.es.md)*
 
-Empecé esto el 26 de enero de 2026 con la idea de entender de verdad cómo funciona un LLM por dentro, en vez de quedarme en usar ChatGPT y ya. Quería montar un modelo local, escribir yo el código que lo rodea y de paso soltarme con Python: clases abstractas, subprocesos, APIs HTTP, todo eso que se aprende mejor cuando lo necesitas para algo tuyo.
+**An assistant that runs entirely on your machine, knows when to use a tool instead of making up the answer, and sends nothing to the cloud without permission.**
 
-CIBO es un asistente que corre entero en local con [Ollama](https://ollama.com/). Sabe cuándo le conviene tirar de una herramienta (una calculadora de verdad, un ejecutor de Python) en lugar de improvisar la respuesta, y si se lo permito puede mandar consultas a modelos en la nube. Por defecto no sale nada del equipo.
+I started this on January 26, 2026 to really understand how an LLM works on the inside, instead of stopping at using ChatGPT. I wanted to run a local model, write the code around it myself and get properly comfortable with Python along the way: abstract classes, subprocesses, HTTP APIs, all the stuff you learn best when you need it for something of your own.
 
-> **Proyecto en pausa indefinida.** Lo dejé aparcado y no tengo previsto retomarlo a corto plazo. Los motivos están explicados abajo, en [Estado del proyecto](#estado-del-proyecto). Lo publico porque el código sirve para ver cómo se monta esto por dentro, no como algo terminado ni mantenido.
+CIBO is an assistant that runs fully local with [Ollama](https://ollama.com/). It knows when it's better off reaching for a tool (a real calculator, a Python executor) instead of improvising the answer, and if I allow it, it can send queries to cloud models. By default nothing leaves the machine.
 
-Hay piezas a medio hacer. Las tengo listadas al final, sin maquillar.
+> **Project on indefinite hold.** I've shelved it and don't plan to pick it back up any time soon. The reasons are explained below, in [Project status](#project-status). I'm publishing it because the code is useful to see how this kind of thing is built, not as something finished or maintained.
 
-## Cómo ha ido creciendo
+> **Language note:** CIBO talks to you in Spanish. Its persona, its replies and the keywords it uses to detect intent (`calcula`, `ejecuta`, `analiza`…) are in Spanish. The code and the architecture are what this repo is about.
 
-**26 de enero de 2026.** Lo mínimo para hablar con el modelo: cliente HTTP contra Ollama con streaming token a token, el bucle de consola y el modelfile con la personalidad de CIBO.
+Some pieces are half-done. They're listed at the end, unvarnished.
 
-**28 de enero.** El sistema de herramientas. Aquí es donde empezó lo interesante, porque un LLM de 8B es malísimo con los números y hacía falta que delegase en una calculadora real. De paso, un ejecutor de Python en subproceso y los scripts de prueba.
+## How it grew
 
-**7 de febrero.** La capa de arriba: memoria vectorial con ChromaDB, agentes intercambiables (Ollama, Claude, Gemini) tras una interfaz común, un router que decide cuál usar y la parte de privacidad.
+**January 26, 2026.** The bare minimum to talk to the model: an HTTP client for Ollama with token-by-token streaming, the console loop and the modelfile with CIBO's personality.
 
-## Qué hace
+**January 28.** The tool system. This is where it got interesting, because an 8B LLM is terrible with numbers and it needed to hand off to a real calculator. Along with it, a subprocess-based Python executor and the test scripts.
 
-Corre local por defecto. El modelo va en Ollama contra mi GPU y no hace llamadas a internet salvo que yo active los agentes de nube.
+**February 7.** The top layer: vector memory with ChromaDB, swappable agents (Ollama, Claude, Gemini) behind a common interface, a router that decides which one to use, and the privacy layer.
 
-Usa herramientas cuando toca. El agente lee la intención de lo que escribes: si detecta matemáticas llama a `Calculator`, y si le pides ejecutar algo llama a `CodeExecutor`, que corre el código en un subproceso con timeout.
+## What it does
 
-Recuerda entre sesiones. ChromaDB guarda información en una base vectorial persistente. Es opcional y viene desactivado.
+Runs locally by default. The model runs in Ollama on my GPU and makes no internet calls unless I enable the cloud agents.
 
-Cambia de modelo según el caso. Ollama, Claude y Gemini comparten la misma interfaz, así que el router puede elegir uno u otro sin que el resto del código se entere.
+Uses tools when it should. The agent reads the intent of what you type: if it detects math it calls `Calculator`, and if you ask it to run something it calls `CodeExecutor`, which runs the code in a subprocess with a timeout.
 
-Protege lo que no debe salir. Hay tres modos de privacidad (`paranoid`, `balanced`, `performance`) y una capa que detecta API keys, contraseñas, tarjetas o números de la seguridad social antes de que puedan viajar a la nube. También redacta IPs y emails de las respuestas que vuelven.
+Remembers across sessions. ChromaDB stores information in a persistent vector database. It's optional and off by default.
 
-## Requisitos
+Switches models depending on the case. Ollama, Claude and Gemini share the same interface, so the router can pick one or another without the rest of the code noticing.
 
-| Requisito | Versión / nota |
+Protects what shouldn't leave. There are three privacy modes (`paranoid`, `balanced`, `performance`) and a layer that detects API keys, passwords, card numbers or social security numbers before they can travel to the cloud. It also redacts IPs and emails from the responses that come back.
+
+## Requirements
+
+| Requirement | Version / note |
 |---|---|
-| Python | 3.10 o superior (lo desarrollo con 3.13) |
-| Ollama | corriendo en `localhost:11434` |
-| Modelo | `llama3.1:8b`, o el propio `cibo:latest` |
-| GPU | recomendada, con 8 GB de VRAM llega justo para un 8B. En CPU va, pero lento |
+| Python | 3.10 or later (I develop with 3.13) |
+| Ollama | running on `localhost:11434` |
+| Model | `llama3.1:8b`, or the custom `cibo:latest` |
+| GPU | recommended; 8 GB of VRAM is just enough for an 8B model. It runs on CPU, but slowly |
 
-## Instalación
+## Installation
 
 ```bash
 git clone https://github.com/jorgeress/cibo.git
 cd cibo
 
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux / macOS
+source venv/bin/activate     # Linux / macOS
+# venv\Scripts\activate      # Windows
 
 pip install -r requirements.txt
 
-cp .env.example .env         # y ajusta los valores
+cp .env.example .env         # and adjust the values
 ```
 
-Arranca Ollama y baja el modelo base:
+Start Ollama and pull the base model:
 
 ```bash
 ollama serve
 ollama pull llama3.1:8b
 ```
 
-### Modelo propio (opcional)
+### Custom model (optional)
 
-`cibo-config.modelfile` define la personalidad de CIBO y sus parámetros de rendimiento: 8192 tokens de contexto, temperatura 0.7 y `repeat_penalty` 1.15. Para construirlo:
+`cibo-config.modelfile` defines CIBO's personality and its performance parameters: 8192 tokens of context, temperature 0.7 and `repeat_penalty` 1.15. To build it:
 
 ```bash
 ollama create cibo -f cibo-config.modelfile
 ```
 
-Luego pon `MODEL_NAME=cibo:latest` en tu `.env`.
+Then set `MODEL_NAME=cibo:latest` in your `.env`.
 
-## Uso
+## Usage
 
 ```bash
 python main.py
 ```
 
-Se abre una consola interactiva:
+An interactive console opens (the conversation is in Spanish):
 
 ```
 👤 Tú: cuánto es 8347 * 9562
@@ -88,175 +92,175 @@ Se abre una consola interactiva:
 hola
 ```
 
-### Comandos
+### Commands
 
-| Comando | Acción |
+| Command | Action |
 |---|---|
-| `/help` | Ayuda y capacidades |
-| `/tools` | Herramientas cargadas y veces usadas |
-| `/models` | Modelos disponibles en Ollama |
-| `/history` | Historial de la sesión |
-| `/save` | Exporta la conversación a `data/conversations/` |
-| `/clear` | Limpia pantalla e historial |
-| `/exit` | Salir |
+| `/help` | Help and capabilities |
+| `/tools` | Loaded tools and how many times each was used |
+| `/models` | Models available in Ollama |
+| `/history` | Session history |
+| `/save` | Export the conversation to `data/conversations/` |
+| `/clear` | Clear the screen and history |
+| `/exit` | Quit |
 
-## Arquitectura
+## Architecture
 
 ```
-main.py                    Consola interactiva (bucle + comandos)
+main.py                    Interactive console (loop + commands)
 │
 └── src/
     ├── core/
-    │   ├── ollama_client.py   Cliente HTTP de Ollama (chat, streaming, historial)
-    │   └── agent.py           Agente: detecta intención y ejecuta herramientas
+    │   ├── ollama_client.py   Ollama HTTP client (chat, streaming, history)
+    │   └── agent.py           Agent: detects intent and runs tools
     │
     ├── tools/
-    │   ├── base.py            Clase abstracta Tool (run() envuelve errores y contadores)
-    │   ├── calculator.py      Evaluación matemática con lista blanca de caracteres
-    │   ├── code_executor.py   Python en subproceso: timeout 5s, imports peligrosos bloqueados
-    │   └── web_search.py      (vacío, pendiente)
+    │   ├── base.py            Abstract Tool class (run() wraps errors and counters)
+    │   ├── calculator.py      Math evaluation with a character allowlist
+    │   ├── code_executor.py   Python in a subprocess: 5s timeout, dangerous imports blocked
+    │   └── web_search.py      (empty, pending)
     │
     ├── agents/
-    │   ├── base_agent.py      Interfaz común: generate() / is_available()
-    │   ├── ollama_agent.py    Backend local
-    │   ├── claude_agent.py    Backend Anthropic (opcional)
-    │   └── gemini_agent.py    Backend Google (opcional)
+    │   ├── base_agent.py      Common interface: generate() / is_available()
+    │   ├── ollama_agent.py    Local backend
+    │   ├── claude_agent.py    Anthropic backend (optional)
+    │   └── gemini_agent.py    Google backend (optional)
     │
     ├── orchestrator/
-    │   ├── router.py          Elige agente según sensibilidad, complejidad y modo
-    │   └── coordinator.py     Une router, memoria y herramientas
+    │   ├── router.py          Picks an agent based on sensitivity, complexity and mode
+    │   └── coordinator.py     Ties together router, memory and tools
     │
     ├── storage/
-    │   └── vector_store.py    Memoria persistente con ChromaDB
+    │   └── vector_store.py    Persistent memory with ChromaDB
     │
     └── security/
-        ├── privacy.py         Modos paranoid / balanced / performance
-        └── sanitizer.py       Bloqueo de datos sensibles y redacción de respuestas
+        ├── privacy.py         paranoid / balanced / performance modes
+        └── sanitizer.py       Sensitive data blocking and response redaction
 ```
 
-### Cómo decide el agente
+### How the agent decides
 
-`Agent.process()` va en cascada, de lo más barato a lo más caro. Antes de gastar
-una sola generación del modelo, mira si la pregunta la puede resolver una
-herramienta:
+`Agent.process()` works as a cascade, from cheapest to most expensive. Before
+spending a single model generation, it checks whether a tool can answer the
+question:
 
 ```mermaid
 flowchart TD
-    IN(["Lo que escribes"]) --> M{"¿Es una pregunta<br/>matemática?"}
-    M -->|sí| CALC["Calculator<br/>lista blanca de caracteres"]
-    M -->|no| EX{"¿Te piden<br/>ejecutar código?"}
-    EX -->|sí| CODE["CodeExecutor<br/>subproceso · timeout 5s"]
-    EX -->|no| LLM["LLM en Ollama<br/>system prompt + últimos 10 mensajes + memoria"]
-    LLM --> T{"¿Ha pedido una<br/>herramienta?"}
-    T -->|sí| RUN["Ejecuta la herramienta"]
-    T -->|no| OUT(["Respuesta"])
+    IN(["What you type"]) --> M{"Is it a<br/>math question?"}
+    M -->|yes| CALC["Calculator<br/>character allowlist"]
+    M -->|no| EX{"Are you asking<br/>to run code?"}
+    EX -->|yes| CODE["CodeExecutor<br/>subprocess · 5s timeout"]
+    EX -->|no| LLM["LLM in Ollama<br/>system prompt + last 10 messages + memory"]
+    LLM --> T{"Did it ask<br/>for a tool?"}
+    T -->|yes| RUN["Run the tool"]
+    T -->|no| OUT(["Answer"])
     CALC --> OUT
     CODE --> OUT
     RUN --> OUT
 ```
 
-Paso a paso:
+Step by step:
 
-1. Mira si es una pregunta matemática, por palabras clave (`calcula`, `cuánto`, `multiplica`) o por patrones tipo `\d+ [+-*/] \d+`. Si lo es, extrae la expresión y llama a `Calculator` sin molestar al LLM.
-2. Mira si le piden ejecutar código, por verbos como `ejecuta`, `corre` o `run`. Distingue "ejecuta este código" de "me gusta Python", que solo lo menciona.
-3. Si no está claro, pregunta al LLM con el system prompt, los últimos 10 mensajes del historial y lo que haya recordado de la memoria. El modelo puede contestar con `<tool>Nombre</tool><params>{...}</params>`.
-4. Si pidió una herramienta y la reconoce, la ejecuta.
-5. Si no, devuelve la respuesta tal cual.
+1. It checks whether it's a math question, by keywords (`calcula`, `cuánto`, `multiplica`) or by patterns like `\d+ [+-*/] \d+`. If so, it extracts the expression and calls `Calculator` without bothering the LLM.
+2. It checks whether you're asking it to run code, by verbs like `ejecuta`, `corre` or `run`. It tells "run this code" apart from "I like Python", which only mentions it.
+3. If it's not clear, it asks the LLM with the system prompt, the last 10 messages of history and whatever it recalled from memory. The model can reply with `<tool>Name</tool><params>{...}</params>`.
+4. If it asked for a tool and the agent recognizes it, it runs it.
+5. Otherwise, it returns the answer as is.
 
-### Cómo decide el router
+### How the router decides
 
-`AgentRouter.route()` pone la privacidad por delante de la potencia. Salir a la
-nube es la excepción, no lo normal: hay que pasar por cuatro filtros para
-llegar ahí.
+`AgentRouter.route()` puts privacy ahead of power. Going to the cloud is the
+exception, not the norm: a query has to get through four filters to end up
+there.
 
 ```mermaid
 flowchart TD
-    Q(["Consulta"]) --> P{"¿Modo paranoid?"}
-    P -->|sí| LOCAL["Ollama en local"]
-    P -->|no| S{"¿Datos sensibles?<br/>tarjetas, contraseñas, tokens"}
-    S -->|sí| LOCAL
-    S -->|no| SIMPLE{"¿Tarea simple?<br/>saludos, definiciones"}
-    SIMPLE -->|sí| LOCAL
-    SIMPLE -->|no| PERF{"¿Modo performance y<br/>razonamiento complejo?"}
+    Q(["Query"]) --> P{"Paranoid mode?"}
+    P -->|yes| LOCAL["Ollama, local"]
+    P -->|no| S{"Sensitive data?<br/>cards, passwords, tokens"}
+    S -->|yes| LOCAL
+    S -->|no| SIMPLE{"Simple task?<br/>greetings, definitions"}
+    SIMPLE -->|yes| LOCAL
+    SIMPLE -->|no| PERF{"Performance mode and<br/>complex reasoning?"}
     PERF -->|no| LOCAL
-    PERF -->|sí| CLOUD["Claude, si está disponible"]
+    PERF -->|yes| CLOUD["Claude, if available"]
 ```
 
-Las reglas, en orden:
+The rules, in order:
 
-- En modo `paranoid` siempre va local, sin excepciones.
-- Si detecta datos sensibles (tarjetas, contraseñas, tokens, números de la seguridad social) también va local.
-- Si la tarea es simple, tipo saludos o definiciones, la resuelve en local y no gasta API.
-- En modo `performance`, si la pregunta pide razonamiento complejo (`analiza`, `compara`, `evalúa`), tira de Claude si está disponible.
-- En cualquier otro caso, local.
+- In `paranoid` mode it always stays local, no exceptions.
+- If it detects sensitive data (card numbers, passwords, tokens, social security numbers) it also stays local.
+- If the task is simple, like greetings or definitions, it's handled locally without spending API calls.
+- In `performance` mode, if the question calls for complex reasoning (`analiza`, `compara`, `evalúa`), it uses Claude if available.
+- In any other case, local.
 
-### Modos de privacidad
+### Privacy modes
 
-| Modo | Agentes | Internet | Memoria en la nube |
+| Mode | Agents | Internet | Cloud memory |
 |---|---|---|---|
-| `paranoid` | solo Ollama | ❌ | ❌ |
-| `balanced` *(por defecto)* | Ollama + Claude | ✅ | ❌ |
+| `paranoid` | Ollama only | ❌ | ❌ |
+| `balanced` *(default)* | Ollama + Claude | ✅ | ❌ |
 | `performance` | Ollama + Claude + Gemini | ✅ | ✅ |
 
-## Seguridad
+## Security
 
-`CodeExecutor` lanza el código en un subproceso con 5 segundos de timeout y bloquea por análisis estático los imports de `os`, `sys`, `subprocess`, `socket`, `requests`, `urllib`, `http`, `ftplib` y `smtplib`, además de `eval`, `exec`, `compile` y `open`.
+`CodeExecutor` runs the code in a subprocess with a 5-second timeout and uses static analysis to block imports of `os`, `sys`, `subprocess`, `socket`, `requests`, `urllib`, `http`, `ftplib` and `smtplib`, as well as `eval`, `exec`, `compile` and `open`.
 
-Aclaro una cosa: eso es una barrera contra código que la líe sin querer, no un sandbox de verdad. No hay aislamiento a nivel de sistema operativo. Si algún día expongo esto a entrada de terceros habrá que meterlo en un contenedor.
+To be clear: that's a guard against code that causes trouble by accident, not a real sandbox. There's no OS-level isolation. If I ever expose this to third-party input, it'll have to go in a container.
 
-`Calculator` valida los caracteres contra una lista blanca antes de evaluar y solo expone funciones de `math`.
+`Calculator` checks characters against an allowlist before evaluating and only exposes functions from `math`.
 
-`SecurityLayer` se aplica antes de cualquier salida a la nube y bloquea el envío entero si encuentra un patrón sensible.
+`SecurityLayer` runs before anything goes to the cloud and blocks the whole request if it finds a sensitive pattern.
 
 ## Tests
 
-Scripts de comprobación manual en la raíz. Necesitan Ollama corriendo:
+Manual check scripts in the root. They need Ollama running:
 
 ```bash
-python test_simple.py        # diagnóstico de imports y conexión
-python test_complete.py      # suite completa: cliente, herramientas, agente
-python test_stress.py        # casos límite y uso realista
-python test_debug_agent.py   # traza del agente ejecutando código
+python test_simple.py        # import and connection diagnostics
+python test_complete.py      # full suite: client, tools, agent
+python test_stress.py        # edge cases and realistic usage
+python test_debug_agent.py   # trace of the agent running code
 ```
 
-No son tests de `pytest`: se lanzan directamente e imprimen resultados por pantalla. La carpeta `tests/` la tengo reservada para cuando monte la suite automatizada.
+These aren't `pytest` tests: you run them directly and they print their results. The `tests/` folder is reserved for when I set up the automated suite.
 
-## Estado del proyecto
+## Project status
 
-En pausa indefinida desde febrero de 2026, por dos razones.
+On indefinite hold since February 2026, for two reasons.
 
-La primera es la GPU. Con 8 GB de VRAM te mueves en modelos de 7B u 8B cuantizados, y ahí se nota el techo enseguida: el modelo se lía con instrucciones de varios pasos, se inventa cosas y hay que sujetarlo con detección por palabras clave en vez de dejar que decida él. Buena parte del código que hay aquí existe precisamente para compensar eso. Los modelos que sí razonan bien no me caben en local, y montar la infraestructura para ir más allá se salía de lo que quería aprender.
+The first is the GPU. With 8 GB of VRAM you're limited to quantized 7B or 8B models, and you hit the ceiling fast: the model gets confused by multi-step instructions, makes things up, and has to be held in place with keyword detection instead of being left to decide. A good part of the code here exists precisely to make up for that. The models that do reason well don't fit locally, and building the infrastructure to go further was beyond what I wanted to learn.
 
-La segunda es que esto se mueve muy rápido. Entre que empecé y lo dejé, salieron modelos mejores, Ollama cambió cosas y aparecieron librerías que resuelven de un plumazo lo que aquí está hecho a mano. Reescribirlo cada pocas semanas para ir detrás del estado del arte no era el objetivo.
+The second is that this field moves very fast. Between starting and shelving it, better models came out, Ollama changed things and libraries appeared that solve in one go what's done by hand here. Rewriting it every few weeks to keep up with the state of the art wasn't the goal.
 
-Y el objetivo era aprender, que eso sí salió. Entender cómo se habla con un modelo por HTTP, por qué un LLM necesita herramientas externas para no inventarse los números, cómo se aísla la ejecución de código, qué es una base vectorial y para qué sirve, cómo se diseña una interfaz común para intercambiar backends. Todo eso está en el repo y funciona.
+The goal was to learn, and that did happen. Understanding how to talk to a model over HTTP, why an LLM needs external tools so it doesn't make up numbers, how to isolate code execution, what a vector database is and what it's for, how to design a common interface to swap backends. All of that is in the repo and it works.
 
-Así que lo dejo publicado como está. Si alguien lo mira buscando referencia de cómo se monta un asistente local con herramientas, le puede servir. No busques aquí una librería mantenida.
+So I'm leaving it published as it is. If someone looks at it for a reference on how to build a local assistant with tools, it might help. Don't come here looking for a maintained library.
 
-## Lo que funciona y lo que falta
+## What works and what's missing
 
-Lo que funciona:
+What works:
 
-- La consola `main.py` con Ollama local, `Calculator` y `CodeExecutor`.
-- Historial de sesión, exportación a JSON y los comandos de consola.
+- The `main.py` console with local Ollama, `Calculator` and `CodeExecutor`.
+- Session history, JSON export and the console commands.
 
-Lo que está a medias:
+What's half-done:
 
-- `src/tools/web_search.py` está vacío, aunque `duckduckgo-search` y `beautifulsoup4` ya figuran en `requirements.txt`.
-- `ClaudeAgent` trae como modelo por defecto `claude-3-5-sonnet-20241022`, que Anthropic retiró en octubre de 2025 y hoy devuelve 404. Hay que pasarle un modelo actual al construirlo. Es un buen ejemplo de lo que cuento arriba sobre la velocidad a la que se queda todo viejo.
-- `Coordinator` y `AgentRouter` están escritos pero `main.py` todavía no los usa: la consola instancia `Agent` directamente, así que al multi-agente solo se llega importándolo desde código.
-- La memoria vectorial (`use_memory=True`) es opcional y viene desactivada. Hacen falta `chromadb` y `sentence-transformers` instalados.
-- `Agent.process()` lee de la memoria pero nunca escribe en ella sola. Hay que llamar a `save_to_memory()` a mano.
-- El router busca los agentes por las claves `ollama_local` y `claude_api`, que salen de `BaseAgent.name`. Si añado un agente con otro nombre tendré que revisar eso.
-- `requirements.txt` arrastra dependencias que aún no uso (`streamlit`, `discord.py`, `langchain`, `faiss-cpu`), de las interfaces que tengo pensadas.
+- `src/tools/web_search.py` is empty, even though `duckduckgo-search` and `beautifulsoup4` are already in `requirements.txt`.
+- `ClaudeAgent` defaults to `claude-3-5-sonnet-20241022`, which Anthropic retired in October 2025 and now returns 404. You have to pass it a current model when constructing it. It's a good example of what I said above about how fast everything goes stale.
+- `Coordinator` and `AgentRouter` are written but `main.py` doesn't use them yet: the console instantiates `Agent` directly, so the multi-agent setup is only reachable by importing it from code.
+- Vector memory (`use_memory=True`) is optional and off by default. It needs `chromadb` and `sentence-transformers` installed.
+- `Agent.process()` reads from memory but never writes to it on its own. You have to call `save_to_memory()` by hand.
+- The router looks up agents by the keys `ollama_local` and `claude_api`, which come from `BaseAgent.name`. If I add an agent with a different name I'll have to revisit that.
+- `requirements.txt` pulls in dependencies I don't use yet (`streamlit`, `discord.py`, `langchain`, `faiss-cpu`), for the interfaces I had in mind.
 
-Lo que llegué a planear y se queda sin hacer, por la pausa:
+What I got as far as planning and won't get done, because of the hold:
 
-- Interfaz web con Streamlit y un bot de Discord.
-- RAG sobre documentos locales, en `data/documents/`.
-- Integración con Telegram y WhatsApp.
+- A Streamlit web UI and a Discord bot.
+- RAG over local documents, in `data/documents/`.
+- Telegram and WhatsApp integration.
 
-## El nombre
+## The name
 
 ```
             ╭───────────────╮
@@ -274,12 +278,12 @@ Lo que llegué a planear y se queda sin hacer, por la pausa:
      Ollama      Claude      Gemini
 ```
 
-CIBO viene de *Blame!*, el manga de Tsutomu Nihei. Cibo es una científica que a lo largo de la historia va cambiando de cuerpo: la misma cabeza dentro de recipientes distintos.
+CIBO comes from *Blame!*, the manga by Tsutomu Nihei. Cibo is a scientist who keeps changing bodies throughout the story: the same mind inside different vessels.
 
-Le puse su nombre porque resultó ser exactamente lo que acabó haciendo `BaseAgent`. Ollama, Claude y Gemini son cuerpos intercambiables detrás de la misma interfaz, y el router decide en cuál se mete CIBO sin que el resto del código se entere. Por defecto vive en el local y los otros dos están vacíos, que es lo que dibuja el diagrama.
+I named it after her because that turned out to be exactly what `BaseAgent` ended up doing. Ollama, Claude and Gemini are interchangeable bodies behind the same interface, and the router decides which one CIBO steps into without the rest of the code noticing. By default it lives in the local one and the other two are empty, which is what the diagram shows.
 
-## Licencia
+## License
 
-MIT, en el archivo [LICENSE](LICENSE). Coge lo que te sirva: puedes usarlo, copiarlo, modificarlo y distribuirlo, incluso en algo comercial, mientras mantengas el aviso de copyright. Sin garantía de ningún tipo, que para un proyecto en pausa conviene decirlo en serio.
+MIT, in the [LICENSE](LICENSE) file. Take whatever is useful: you can use, copy, modify and distribute it, even commercially, as long as you keep the copyright notice. No warranty of any kind, which for a project on hold is worth saying seriously.
 
-Eso cubre el código de este repositorio. Llama 3.1, el modelo base sobre el que se construye `cibo-config.modelfile`, va por su cuenta con la licencia de Meta.
+That covers the code in this repository. Llama 3.1, the base model `cibo-config.modelfile` is built on, comes with Meta's own license.
